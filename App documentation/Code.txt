@@ -1,0 +1,209 @@
+
+
+// 8 -> YAW
+// 9 -> PITCH
+#include<SoftwareSerial.h>
+#include<Servo.h>
+#include <MPU6050.h>
+#include <Wire.h>
+MPU6050 mpu;
+// Timers
+unsigned long timer = 0;
+float timeStep = 0.01;
+float t=0.1;
+int inspeed=50;
+// Pitch, Roll and Yaw values
+float pitch =0;
+float yaw = 0;
+float kp=0.1;
+float ki=0.09;
+float kd=0.4;
+int rel1=0,rel2=0,pitchd=0,yawd=0;
+int pi,ya,rpm1=0,rpm2=0;
+int pitch_data, yaw_data;
+int pitchrel=0,arun=0;
+Servo esc1,esc2;
+SoftwareSerial mySerial(10,11);
+void setup()
+{
+pinMode(8,OUTPUT);
+pinMode(9,OUTPUT);
+mySerial.begin(9600);
+Serial.begin(9600);
+esc1.attach(12);
+esc1.write(30);
+esc2.attach(13);
+esc2.write(30);
+  while(!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G))
+  {
+    Serial.println("Could not find a valid MPU6050 sensor, check wiring!");
+    delay(500);
+  }
+ mpu.calibrateGyro();
+ mpu.setThreshold(3);
+
+}
+void loop() {
+  Vector norm = mpu.readNormalizeGyro();
+  pitch = pitch + norm.XAxis * timeStep;
+  yaw = yaw + norm.ZAxis * timeStep;
+ 
+if(mySerial.available()){
+  int data = mySerial.read();
+  Serial.println(data);
+   //stop
+ if(data==215){
+  esc1.write(0);
+  esc2.write(0);
+  yawd=0;
+  pitchd=0;
+ }
+ if(data==216){
+  esc1.write(0);
+  esc2.write(0);
+  rpm1=0;
+  rpm2=0;
+ }
+ 
+//relay
+ if(data==241) 
+ {
+      rel1++;
+ }
+else if(data==242)
+   {
+      rel1--;
+   }
+    if(data==243) 
+ {
+      rel2++;
+ }
+else if(data==244)
+   {
+      rel2--;
+   }
+//pitch relay
+   if(data==245){
+    pitchrel=0;
+   }
+   if(data==246){
+    pitchrel=1;
+   }
+    
+//rpm control
+ if(data>=0 && data<=50){
+  pi=data+50;
+  rpm1++;
+ }
+ if(data>=51 && data<=100){
+  ya=data;
+  rpm2++;
+ }
+ // yaw data
+  if((data>=101)&&(data<=190))
+  {  
+  
+  yaw_data = (data-100)*4;
+  Serial.println(yaw_data); 
+  yawd++;
+      
+  }
+ 
+  //pitch data
+  if((data>=191)&&(data<=210))
+  {
+  pitch_data =data-190;
+  pitchd++;     
+  }
+  
+  if(data==247){
+    arun++;  
+  }
+  if(data==248){
+     arun--; 
+  }
+}
+//end
+if(rel1==0){
+      digitalWrite(9,LOW);      
+    }
+ if(rel1==1){
+    digitalWrite(9,HIGH);   
+    }
+    if(rel2==0){  
+      digitalWrite(8,LOW);      
+    }
+ if(rel2==1){    
+    digitalWrite(8,HIGH);  
+    }
+//
+    if(rpm1>0){
+      esc1.write(pi);
+      Serial.println(pi);
+    }
+    if(rpm2>0){
+       esc2.write(ya);
+        Serial.println(ya);
+   }
+//
+pitchdata();    
+yawdata(); 
+autorun(); 
+}
+void autorun(){
+  if(arun>0){
+int i=0;
+  esc1.write(52);
+  esc2.write(52);
+}
+else{
+ //Serial.println("stop");
+  esc1.write(0);
+  esc2.write(0);
+}
+}
+void pitchdata(){
+if((pitchd>0)&&(pitchrel==0)){  
+  digitalWrite(9,HIGH);
+  //int pidat = (1*(pitch_data)+50);
+  int pidat = pitch_data+(((kp/t)*(ki)*(kd/t))+inspeed);
+  esc2.write(pidat);
+  Serial.println(pidat);
+  }
+if((pitchd>0)&&(pitchrel==1)){  
+  digitalWrite(9,LOW);
+  int pidat = ((5*pitch_data)+50);
+  esc2.write(pidat);
+  Serial.println(pidat);
+  }
+   
+}
+void yawdata(){
+if(yawd>0){
+  digitalWrite(8,HIGH);
+  int a=yaw_data;
+  int b=a-20; //40
+  int c=a+20; //60
+ if(yaw<b)
+  {
+    digitalWrite(8,HIGH);
+    esc1.write(49);
+    Serial.print("start");
+    
+  }
+  if((yaw>=b)&&(yaw<=c))
+  {
+    digitalWrite(8,HIGH);
+    esc1.write(0);
+     Serial.print("stop");
+  }
+  if(yaw>c)
+  {
+   digitalWrite(8,LOW);
+   esc1.write(60);
+    Serial.print("reverse");
+  
+  }  
+}
+  
+}
